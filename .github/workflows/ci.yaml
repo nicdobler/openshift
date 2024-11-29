@@ -1,0 +1,55 @@
+name: CI
+on: 
+  push: 
+    branches:
+      - main
+jobs:
+  kubernetes: 
+    runs-on: ubuntu-latest    
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: build-hasher
+        run: docker build -t localhost/hasher src/hasher/
+      - name: build-rng
+        run: docker build -t localhost/rng src/rng/
+      - name: build-webui
+        run: docker build -t localhost/webui src/webui/
+      - name: build-worker
+        run: docker build -t localhost/worker src/worker/
+      - name: list-build
+        run: docker images
+      - name: minikube
+        run: |
+          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
+          sudo apt-get install ./minikube_latest_amd64.deb
+      - name: init
+        run: minikube start --driver=docker
+      - name: kubectl
+        run: kubectl version
+      - name: deploy
+        run: |
+          kubectl apply -f src/hasher/hasher.yaml
+          kubectl apply -f src/redis/redis.yaml
+          kubectl apply -f src/rng/rng.yaml
+          kubectl apply -f src/webui/webui.yaml
+          kubectl apply -f src/worker/worker.yaml
+      - name: test-webui
+        run: |
+          while true
+          do sleep 10
+          kubectl logs deploy/webui 2>& 1 | grep WEBUI.running && break
+          done
+      - name: test-redis
+        run: |
+          while true
+          do sleep 100
+          kubectl logs sts/redis 2>& 1 | grep Ready.to.accept.connections && break
+          done
+      - name: test-worker
+        run: |
+          while true
+          do sleep 10
+          kubectl logs deploy/worker 2>& 1 | grep Coin.found && break
+          done
+          
